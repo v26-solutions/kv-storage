@@ -1,0 +1,28 @@
+[package]
+name = "kv-storage"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "lib/lib.rs"
+test = false
+doctest = false
+
+[features]
+serde = [ "dep:serde" ]
+rkyv = [ "dep:rkyv" ]
+
+[dependencies]
+serde = { workspace = true, features = [ "derive" ], optional = true }
+rkyv = { workspace = true, optional = true }
+
+kv-storage-serde = { path = "crates/serde" }
+kv-storage-rkyv = { path = "crates/rkyv" }
+
+[workspace]
+members = [ "./", "crates/*", "test", "test/*" ]
+
+[workspace.dependencies]
+serde = { version = "1.0.152" }
+thiserror = "1.0.38"
+rkyv = "0.7.40"

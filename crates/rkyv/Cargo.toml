@@ -1,0 +1,17 @@
+[package]
+name = "kv-storage-rkyv"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "impl.rs"
+test = false
+doctest = false
+
+[features]
+default = [ "stock" ]
+stock = [ "dep:thiserror" ]
+
+[dependencies]
+rkyv.workspace = true
+thiserror = { workspace = true, optional = true }

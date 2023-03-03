@@ -1,0 +1,17 @@
+[package]
+name = "mock-consumer"
+version = "0.0.0"
+edition = "2021"
+
+[lib]
+path = "consumer.rs"
+test = false
+doctest = false
+
+[features]
+serde = [ "kv-storage/serde" ]
+rkyv = [ "kv-storage/rkyv" ]
+
+[dependencies]
+kv-storage = { path = "../.." }
+thiserror.workspace = true

@@ -7,14 +7,11 @@ edition = "2021"
 path = "it.rs"
 doctest = false
 
-[features]
-serde = [ "kv-storage/serde", "mock-consumer/serde", "dep:serde_json" ]
-rkyv = [ "kv-storage/rkyv", "mock-consumer/rkyv" ]
-
 [dependencies]
 thiserror.workspace = true
 
 mock-consumer = { path = "mock" }
 kv-storage = { path = ".." }
 
-serde_json = { version = "1.0.93", optional = true }
+bincode = "1.3"
+serde = "1.0"

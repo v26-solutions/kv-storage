@@ -8,10 +8,6 @@ path = "consumer.rs"
 test = false
 doctest = false
 
-[features]
-serde = [ "kv-storage/serde" ]
-rkyv = [ "kv-storage/rkyv" ]
-
 [dependencies]
 kv-storage = { path = "../.." }
 thiserror.workspace = true

@@ -1,3 +1,5 @@
+use kv_storage::{item, map, Item, Map, Storage};
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error<S = ()> {
     #[error(transparent)]
@@ -12,6 +14,7 @@ pub enum Error<S = ()> {
 
 pub struct Balance<'a> {
     account: &'a str,
+    total: u128,
     balance: u128,
 }
 
@@ -25,12 +28,17 @@ impl<'a> Balance<'a> {
         self.balance
     }
 
+    pub fn total(&self) -> u128 {
+        self.total
+    }
+
     pub fn withdraw(&'a mut self, amount: u128) -> Result<ModifiedBalance<'a>, Error> {
         if amount > self.balance {
             return Err(Error::InsufficientFunds);
         }
 
         self.balance -= amount;
+        self.total -= amount;
 
         Ok(Modified(self))
     }
@@ -42,7 +50,14 @@ impl<'a> Balance<'a> {
             return Err(Error::BalanceOverflow);
         }
 
+        let (total, overflow) = self.total.overflowing_add(amount);
+
+        if overflow {
+            return Err(Error::BalanceOverflow);
+        }
+
         self.balance = balance;
+        self.total = total;
 
         Ok(Modified(self))
     }
@@ -62,125 +77,51 @@ impl<'a> std::ops::DerefMut for ModifiedBalance<'a> {
     }
 }
 
-#[cfg(any(feature = "serde", feature = "rkyv"))]
-mod balance_storage_impl {
-    use kv_storage::{map, Map, Storage};
+impl<'a> Balance<'a> {
+    const BALANCES: Map<&str, u128> = map!("balances");
+    const TOTAL: Item<u128> = item!("total_balance");
 
-    use crate::{Balance, Error, ModifiedBalance};
+    fn save<Store: Storage>(&self, store: &mut Store) -> Result<(), Error<Store::Error>> {
+        Self::TOTAL.save(store, &self.total)?;
 
-    impl<'a> Balance<'a> {
-        const MAP: Map<&str, u128> = map!("balances");
-
-        fn save<Store: Storage>(&self, store: &mut Store) -> Result<(), Error<Store::Error>> {
-            Self::MAP
-                .save(store, &self.account, &self.balance)
-                .map_err(Error::from)
-        }
-
-        pub fn load<Store: Storage>(
-            store: &Store,
-            account: &'a str,
-        ) -> Result<Balance<'a>, Error<Store::Error>> {
-            let maybe_loaded = Self::MAP.may_load(store, &account)?;
-
-            Ok(Balance {
-                account,
-                #[cfg(feature = "serde")]
-                balance: maybe_loaded.unwrap_or_default(),
-                #[cfg(feature = "rkyv")]
-                balance: maybe_loaded.map_or(0, |v| *v.as_ref()),
-            })
-        }
+        Self::BALANCES
+            .save(store, &self.account, &self.balance)
+            .map_err(Error::from)
     }
 
-    impl<'a> ModifiedBalance<'a> {
-        pub fn save<Store: Storage>(
-            self,
-            store: &mut Store,
-        ) -> Result<&'a mut Balance<'a>, Error<Store::Error>> {
-            self.0.save(store)?;
-            Ok(self.0)
-        }
+    pub fn account_exists<Store: Storage>(
+        store: &Store,
+        account: &'a str,
+    ) -> Result<bool, Error<Store::Error>> {
+        Self::BALANCES.has_key(store, &account).map_err(Error::from)
+    }
+
+    pub fn load_total<Store: Storage>(store: &Store) -> Result<u128, Error<Store::Error>> {
+        let total = Self::TOTAL.may_load(store)?.unwrap_or_default();
+        Ok(total)
+    }
+
+    pub fn load_account<Store: Storage>(
+        store: &Store,
+        account: &'a str,
+    ) -> Result<Balance<'a>, Error<Store::Error>> {
+        let maybe_balance = Self::BALANCES.may_load(store, &account)?;
+        let maybe_total = Self::TOTAL.may_load(store)?;
+
+        Ok(Balance {
+            account,
+            total: maybe_total.unwrap_or_default(),
+            balance: maybe_balance.unwrap_or_default(),
+        })
     }
 }
 
-#[cfg(feature = "serde")]
-mod config {
-    use kv_storage::serde::{Deserialize, Serialize};
-    use kv_storage::{item, Item, Storage};
-
-    use crate::Error;
-
-    #[derive(Clone, Debug, Serialize, Deserialize)]
-    #[serde(crate = "::kv_storage::serde")]
-    pub struct Config {
-        pub foo: String,
-        pub bar: String,
-        pub baz: u128,
-    }
-
-    impl Config {
-        const SLOT: Item<Self> = item!("config");
-
-        pub fn save<Store: Storage>(&self, store: &mut Store) -> Result<(), Error<Store::Error>> {
-            Self::SLOT.save(store, self).map_err(Error::from)
-        }
-
-        pub fn load<Store: Storage>(store: &Store) -> Result<Self, Error<Store::Error>> {
-            Self::SLOT
-                .may_load(store)
-                .map_err(Error::from)
-                .and_then(|found| found.ok_or(Error::NotFound))
-        }
-
-        pub fn summarize(&self) -> String {
-            format!("foo:{}:bar:{}:baz:{}", self.foo, self.bar, self.baz)
-        }
+impl<'a> ModifiedBalance<'a> {
+    pub fn save<Store: Storage>(
+        self,
+        store: &mut Store,
+    ) -> Result<&'a mut Balance<'a>, Error<Store::Error>> {
+        self.0.save(store)?;
+        Ok(self.0)
     }
 }
-
-#[cfg(feature = "rkyv")]
-mod config {
-    use kv_storage::rkyv::{Archive, Archived, Deserialize, Serialize};
-    use kv_storage::{item, Item, Loaded, Storage};
-
-    use crate::Error;
-
-    #[derive(Clone, Debug, Archive, Serialize, Deserialize)]
-    #[archive(crate = "::kv_storage::rkyv")]
-    pub struct Config {
-        pub foo: String,
-        pub bar: String,
-        pub baz: u128,
-    }
-
-    pub trait ConfigExt {
-        fn summarize(&self) -> String;
-    }
-
-    impl Config {
-        const SLOT: Item<Self> = item!("config");
-
-        pub fn save<Store: Storage>(&self, store: &mut Store) -> Result<(), Error<Store::Error>> {
-            Self::SLOT.save(store, self).map_err(Error::from)
-        }
-
-        pub fn load<Store: Storage>(
-            store: &Store,
-        ) -> Result<Loaded<Store, Self>, Error<Store::Error>> {
-            Self::SLOT
-                .may_load(store)
-                .map_err(Error::from)
-                .and_then(|found| found.ok_or(Error::NotFound))
-        }
-    }
-
-    impl ConfigExt for Archived<Config> {
-        fn summarize(&self) -> String {
-            format!("foo:{}:bar:{}:baz:{}", self.foo, self.bar, self.baz)
-        }
-    }
-}
-
-#[cfg(any(feature = "serde", feature = "rkyv"))]
-pub use config::*;

@@ -78,7 +78,7 @@ impl<'a> std::ops::DerefMut for ModifiedBalance<'a> {
 }
 
 impl<'a> Balance<'a> {
-    const BALANCES: Map<&str, u128> = map!("balances");
+    const BALANCES: Map<1024, &str, u128> = map!("balances");
     const TOTAL: Item<u128> = item!("total_balance");
 
     fn save<Store: Storage>(&self, store: &mut Store) -> Result<(), Error<Store::Error>> {

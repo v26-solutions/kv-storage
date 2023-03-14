@@ -167,15 +167,25 @@ impl<T> Item<T> {
     }
 }
 
-pub struct Map<K, V> {
+pub trait WriteKeyPart {
+    fn write_key_part(&mut self, part: &[u8]);
+}
+
+pub trait WriteCompositeKey {
+    fn total_len(&self) -> usize;
+
+    fn write_into<W: WriteKeyPart>(&self, writer: &mut W);
+}
+
+pub struct Map<const N: usize, K, V> {
     prefix: &'static [u8],
     _k: PhantomData<K>,
     _v: PhantomData<V>,
 }
 
-impl<K, V> Map<K, V>
+impl<const N: usize, K, V> Map<N, K, V>
 where
-    K: AsRef<[u8]>,
+    K: WriteCompositeKey,
 {
     #[must_use]
     pub const fn new(prefix: &'static [u8]) -> Self {
@@ -200,8 +210,8 @@ where
     where
         V: Serialize,
     {
-        let composite = [self.prefix, key.as_ref()].concat();
-        store.save(&composite, item)
+        let composite = compose_key::<N>(self.prefix, key);
+        store.save(composite.as_ref(), item)
     }
 
     /// Load the item for the given key if it exists, otherwise `None`.
@@ -217,8 +227,8 @@ where
     where
         V: DeserializeOwned,
     {
-        let composite = [self.prefix, key.as_ref()].concat();
-        store.may_load::<V>(&composite)
+        let composite = compose_key::<N>(self.prefix, key);
+        store.may_load::<V>(composite.as_ref())
     }
 
     /// Check if a key exists.
@@ -228,10 +238,168 @@ where
     /// This function will return an error if:
     /// - Storage encounters an error.
     pub fn has_key<Store: Storage>(&self, store: &Store, key: &K) -> Result<bool, Store::Error> {
-        let composite = [self.prefix, key.as_ref()].concat();
-        store.has_key(&composite)
+        let composite = compose_key::<N>(self.prefix, key);
+        store.has_key(composite.as_ref())
     }
 }
+
+enum CompositeKeyBuffer<const N: usize> {
+    Stack { buffer: [u8; N], len: usize },
+    Heap(Box<[u8]>),
+}
+
+impl<const N: usize> AsRef<[u8]> for CompositeKeyBuffer<N> {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            CompositeKeyBuffer::Stack { buffer, len } => &buffer[..*len],
+            CompositeKeyBuffer::Heap(v) => v.as_ref(),
+        }
+    }
+}
+
+impl<const N: usize> AsMut<[u8]> for CompositeKeyBuffer<N> {
+    fn as_mut(&mut self) -> &mut [u8] {
+        match self {
+            CompositeKeyBuffer::Stack { buffer, len } => &mut buffer[..*len],
+            CompositeKeyBuffer::Heap(v) => v.as_mut(),
+        }
+    }
+}
+
+impl<const N: usize> AsRef<[u8]> for CompositeKey<N> {
+    fn as_ref(&self) -> &[u8] {
+        self.buffer.as_ref()
+    }
+}
+
+struct CompositeKey<const N: usize> {
+    buffer: CompositeKeyBuffer<N>,
+    written: usize,
+}
+
+impl<const N: usize> CompositeKey<N> {
+    fn new(len: usize) -> Self {
+        let buffer = if len > N {
+            CompositeKeyBuffer::Heap(vec![0; len].into_boxed_slice())
+        } else {
+            CompositeKeyBuffer::Stack {
+                buffer: [0; N],
+                len,
+            }
+        };
+
+        Self { buffer, written: 0 }
+    }
+}
+
+impl<const N: usize> WriteKeyPart for CompositeKey<N> {
+    fn write_key_part(&mut self, part: &[u8]) {
+        self.buffer.as_mut()[self.written..self.written + part.len()].copy_from_slice(part);
+        self.written += part.len();
+    }
+}
+
+fn compose_key<const N: usize>(prefix: &[u8], keys: &impl WriteCompositeKey) -> CompositeKey<N> {
+    let total_len = prefix.len() + keys.total_len();
+
+    let mut composite_key = CompositeKey::new(total_len);
+
+    composite_key.write_key_part(prefix);
+
+    keys.write_into(&mut composite_key);
+
+    composite_key
+}
+
+trait VisitBytes {
+    fn visit_bytes<R, F: FnOnce(&[u8]) -> R>(&self, visitor: F) -> R;
+}
+
+impl<T> WriteCompositeKey for T
+where
+    T: VisitBytes,
+{
+    fn total_len(&self) -> usize {
+        self.visit_bytes(<[u8]>::len)
+    }
+
+    fn write_into<W: WriteKeyPart>(&self, writer: &mut W) {
+        self.visit_bytes(|bytes| writer.write_key_part(bytes));
+    }
+}
+
+impl<T1, T2> WriteCompositeKey for (T1, T2)
+where
+    T1: VisitBytes,
+    T2: VisitBytes,
+{
+    fn total_len(&self) -> usize {
+        self.0.visit_bytes(<[u8]>::len) + self.1.visit_bytes(<[u8]>::len)
+    }
+
+    fn write_into<W: WriteKeyPart>(&self, writer: &mut W) {
+        self.0.visit_bytes(|bytes| writer.write_key_part(bytes));
+        self.1.visit_bytes(|bytes| writer.write_key_part(bytes));
+    }
+}
+
+impl<T1, T2, T3> WriteCompositeKey for (T1, T2, T3)
+where
+    T1: VisitBytes,
+    T2: VisitBytes,
+    T3: VisitBytes,
+{
+    fn total_len(&self) -> usize {
+        self.0.visit_bytes(<[u8]>::len)
+            + self.1.visit_bytes(<[u8]>::len)
+            + self.2.visit_bytes(<[u8]>::len)
+    }
+
+    fn write_into<W: WriteKeyPart>(&self, writer: &mut W) {
+        self.0.visit_bytes(|bytes| writer.write_key_part(bytes));
+        self.1.visit_bytes(|bytes| writer.write_key_part(bytes));
+        self.2.visit_bytes(|bytes| writer.write_key_part(bytes));
+    }
+}
+
+impl<'a> VisitBytes for &'a [u8] {
+    fn visit_bytes<R, F: FnOnce(&[u8]) -> R>(&self, visitor: F) -> R {
+        visitor(self)
+    }
+}
+
+impl<'a> VisitBytes for &'a str {
+    fn visit_bytes<R, F: FnOnce(&[u8]) -> R>(&self, visitor: F) -> R {
+        visitor(self.as_bytes())
+    }
+}
+
+impl VisitBytes for String {
+    fn visit_bytes<R, F: FnOnce(&[u8]) -> R>(&self, visitor: F) -> R {
+        visitor(self.as_bytes())
+    }
+}
+
+impl VisitBytes for Vec<u8> {
+    fn visit_bytes<R, F: FnOnce(&[u8]) -> R>(&self, visitor: F) -> R {
+        visitor(self.as_slice())
+    }
+}
+
+macro_rules! impl_visit_bytes_int {
+    ($($t:ty),+) => {
+        $(impl VisitBytes for $t {
+            fn visit_bytes<R, F>(&self, visitor: F) -> R
+            where
+                F: FnOnce(&[u8]) -> R,
+            {
+                visitor(&self.to_be_bytes())
+            }
+        })*
+    };
+}
+
+impl_visit_bytes_int!(u8, u16, u32, u64, u128);
 
 #[macro_export]
 macro_rules! item {

@@ -2,7 +2,9 @@
 mod test {
     use std::collections::HashMap;
 
-    use kv_storage::{Deserializer, Fallible, GenericStorage, HasKey, Read, Serializer, Write};
+    use kv_storage::{
+        Deserializer, Fallible, GenericStorage, HasKey, Read, Remove, Serializer, Write,
+    };
 
     use serde::{de::DeserializeOwned, Serialize};
 
@@ -37,6 +39,13 @@ mod test {
     impl HasKey for MemRepo {
         fn has_key(&self, key: &[u8]) -> Result<bool, Self::Error> {
             Ok(self.map.contains_key(key))
+        }
+    }
+
+    impl Remove for MemRepo {
+        fn remove(&mut self, key: &[u8]) -> Result<(), Self::Error> {
+            self.map.remove(key);
+            Ok(())
         }
     }
 

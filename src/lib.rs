@@ -54,9 +54,18 @@ pub trait HasKey: Fallible {
     fn has_key(&self, key: &[u8]) -> Result<bool, Self::Error>;
 }
 
+pub trait Remove: Fallible {
+    /// Remove a key and any associated data from storage.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error depending on the implementor
+    fn remove(&mut self, key: &[u8]) -> Result<(), Self::Error>;
+}
+
 pub trait Storage {
     type Serde: Serializer + Deserializer;
-    type Repo: Write + Read + HasKey;
+    type Repo: Write + Read + HasKey + Remove;
     type Error: StdError;
 
     /// Save an item against the given key.
@@ -84,6 +93,14 @@ pub trait Storage {
     /// This function will return an error if:
     /// - Storage encounters an error.
     fn has_key(&self, key: &[u8]) -> Result<bool, Self::Error>;
+
+    /// Remove a key and any associated data from storage.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Storage encounters an error.
+    fn remove(&mut self, key: &[u8]) -> Result<(), Self::Error>;
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -103,7 +120,7 @@ pub struct GenericStorage<Serde, Repo> {
 impl<Serde, Repo> Storage for GenericStorage<Serde, Repo>
 where
     Serde: Serializer + Deserializer,
-    Repo: Read + Write + HasKey,
+    Repo: Read + Write + HasKey + Remove,
 {
     type Serde = Serde;
     type Repo = Repo;
@@ -125,6 +142,10 @@ where
 
     fn has_key(&self, key: &[u8]) -> Result<bool, Self::Error> {
         self.repo.has_key(key).map_err(Error::Repo)
+    }
+
+    fn remove(&mut self, key: &[u8]) -> Result<(), Self::Error> {
+        self.repo.remove(key).map_err(Error::Repo)
     }
 }
 
@@ -164,6 +185,27 @@ impl<T> Item<T> {
         T: DeserializeOwned,
     {
         store.may_load::<T>(self.key)
+    }
+
+    /// Check if the item is empty
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the store encounters an error.
+    pub fn is_empty<Store: Storage>(&self, store: &Store) -> Result<bool, Store::Error>
+    where
+        T: DeserializeOwned,
+    {
+        store.has_key(self.key).map(|has_key| !has_key)
+    }
+
+    /// Clear the item from storage.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the store encounters an error.
+    pub fn clear<Store: Storage>(&self, store: &mut Store) -> Result<(), Store::Error> {
+        store.remove(self.key)
     }
 }
 
@@ -240,6 +282,16 @@ where
     pub fn has_key<Store: Storage>(&self, store: &Store, key: &K) -> Result<bool, Store::Error> {
         let composite = compose_key::<N>(self.prefix, key);
         store.has_key(composite.as_ref())
+    }
+
+    /// Remove any item stored at the given key.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the store encounters an error.
+    pub fn remove<Store: Storage>(&self, store: &mut Store, key: &K) -> Result<(), Store::Error> {
+        let composite = compose_key::<N>(self.prefix, key);
+        store.remove(composite.as_ref())
     }
 }
 

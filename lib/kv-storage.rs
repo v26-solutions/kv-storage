@@ -118,6 +118,12 @@ pub struct KvStore<Serde, Repo> {
     repo: Repo,
 }
 
+impl<Serde, Repo> KvStore<Serde, Repo> {
+    pub const fn new(serde: Serde, repo: Repo) -> Self {
+        Self { serde, repo }
+    }
+}
+
 impl<Serde, Repo> Fallible for KvStore<Serde, Repo>
 where
     Serde: Fallible,

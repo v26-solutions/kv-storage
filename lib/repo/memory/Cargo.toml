@@ -1,0 +1,13 @@
+[package]
+name = "kv-storage-memory"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "memory.rs"
+test = false
+doctest = false
+
+[dependencies]
+thiserror.workspace = true
+kv-storage.workspace = true

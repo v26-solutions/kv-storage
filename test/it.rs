@@ -1,77 +1,14 @@
 #[cfg(test)]
 mod test {
-    use std::collections::HashMap;
-
-    use kv_storage::{Deserializer, Fallible, HasKey, KvStore, Read, Remove, Serializer, Write};
-
-    use serde::{de::DeserializeOwned, Serialize};
+    use kv_storage::KvStore;
+    use kv_storage_bincode::Bincode;
+    use kv_storage_memory::MemoryRepo;
 
     use mock_consumer::Balance;
 
-    #[derive(Debug, thiserror::Error)]
-    #[error("infallible")]
-    struct Infallible;
-
-    #[derive(Default)]
-    struct MemRepo {
-        map: HashMap<Vec<u8>, Vec<u8>>,
-    }
-
-    impl Fallible for MemRepo {
-        type Error = Infallible;
-    }
-
-    impl Write for MemRepo {
-        fn write(&mut self, key: &[u8], bytes: &[u8]) -> Result<(), Self::Error> {
-            self.map.insert(key.to_owned(), bytes.to_owned());
-            Ok(())
-        }
-    }
-
-    impl Read for MemRepo {
-        fn read(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
-            Ok(self.map.get(key).map(Clone::clone))
-        }
-    }
-
-    impl HasKey for MemRepo {
-        fn has_key(&self, key: &[u8]) -> Result<bool, Self::Error> {
-            Ok(self.map.contains_key(key))
-        }
-    }
-
-    impl Remove for MemRepo {
-        fn remove(&mut self, key: &[u8]) -> Result<(), Self::Error> {
-            self.map.remove(key);
-            Ok(())
-        }
-    }
-
-    #[derive(Default)]
-    struct BinSerde {
-        buffer: Vec<u8>,
-    }
-
-    impl Fallible for BinSerde {
-        type Error = bincode::Error;
-    }
-
-    impl Serializer for BinSerde {
-        fn serialize<T: Serialize>(&mut self, item: &T) -> Result<&[u8], Self::Error> {
-            bincode::serialize_into(&mut self.buffer, item)?;
-            Ok(&self.buffer)
-        }
-    }
-
-    impl Deserializer for BinSerde {
-        fn deserialize<T: DeserializeOwned>(bytes: Vec<u8>) -> Result<T, Self::Error> {
-            bincode::deserialize(&bytes)
-        }
-    }
-
     #[test]
     fn it_works() {
-        let mut storage: KvStore<BinSerde, MemRepo> = KvStore::default();
+        let mut storage: KvStore<Bincode, MemoryRepo> = KvStore::default();
 
         assert!(!Balance::account_exists(&storage, "alice").unwrap());
 

@@ -9,9 +9,9 @@ doctest = false
 
 [dependencies]
 thiserror.workspace = true
+serde.workspace = true
 
 mock-consumer = { path = "mock" }
 kv-storage = { path = ".." }
-
-bincode = "1.3"
-serde = "1.0"
+kv-storage-bincode = { path = "../lib/serde/bincode" }
+kv-storage-memory = { path = "../lib/repo/memory" }

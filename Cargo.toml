@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
+path = "lib/kv-storage.rs"
 test = false
 doctest = false
 
@@ -12,8 +13,9 @@ thiserror.workspace = true
 serde.workspace = true
 
 [workspace]
-members = [ "./", "test", "test/*" ]
+members = [ "./", "lib/repo/*", "lib/serde/*",  "test", "test/*" ]
 
 [workspace.dependencies]
 thiserror = "1.0.38"
 serde = "1.0"
+kv-storage = { path = "." }

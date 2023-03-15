@@ -29,9 +29,21 @@ impl<'a> Write for CosmwasmRepo<&'a mut dyn Storage> {
     }
 }
 
+impl<'a> Read for CosmwasmRepo<&'a mut dyn Storage> {
+    fn read(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        Ok(self.0.get(key))
+    }
+}
+
 impl<'a> Read for CosmwasmRepo<&'a dyn Storage> {
     fn read(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
         Ok(self.0.get(key))
+    }
+}
+
+impl<'a> HasKey for CosmwasmRepo<&'a mut dyn Storage> {
+    fn has_key(&self, key: &[u8]) -> Result<bool, Self::Error> {
+        Ok(self.0.get(key).is_some())
     }
 }
 

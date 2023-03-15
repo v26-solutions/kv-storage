@@ -10,7 +10,7 @@ pub trait Fallible {
 }
 
 pub trait Serializer: Fallible {
-    /// Serialize an item returning the buffer.
+    /// Serialize an item, returning the buffer.
     ///
     /// # Errors
     ///
@@ -63,19 +63,9 @@ pub trait Remove: Fallible {
     fn remove(&mut self, key: &[u8]) -> Result<(), Self::Error>;
 }
 
-pub trait Storage {
-    type Serde: Serializer + Deserializer;
-    type Repo: Write + Read + HasKey + Remove;
-    type Error: StdError;
-
-    /// Save an item against the given key.
-    ///
-    /// # Errors
-    ///
-    /// This function will return an error if:
-    /// - Serializer encounters an error.
-    /// - Write encounters an error.
-    fn save<T: Serialize>(&mut self, key: &[u8], item: &T) -> Result<(), Self::Error>;
+pub trait Storage: Fallible {
+    type Serde: Deserializer;
+    type Repo: Read + HasKey;
 
     /// Load an item for a given key if it exists.
     ///
@@ -93,6 +83,17 @@ pub trait Storage {
     /// This function will return an error if:
     /// - Storage encounters an error.
     fn has_key(&self, key: &[u8]) -> Result<bool, Self::Error>;
+}
+
+pub trait MutStorage: Storage {
+    /// Save an item against the given key.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Serializer encounters an error.
+    /// - Write encounters an error.
+    fn save<T: Serialize>(&mut self, key: &[u8], item: &T) -> Result<(), Self::Error>;
 
     /// Remove a key and any associated data from storage.
     ///
@@ -112,25 +113,26 @@ pub enum Error<S, R> {
 }
 
 #[derive(Default)]
-pub struct GenericStorage<Serde, Repo> {
+pub struct KvStore<Serde, Repo> {
     serde: Serde,
     repo: Repo,
 }
 
-impl<Serde, Repo> Storage for GenericStorage<Serde, Repo>
+impl<Serde, Repo> Fallible for KvStore<Serde, Repo>
 where
-    Serde: Serializer + Deserializer,
-    Repo: Read + Write + HasKey + Remove,
+    Serde: Fallible,
+    Repo: Fallible,
+{
+    type Error = Error<Serde::Error, Repo::Error>;
+}
+
+impl<Serde, Repo> Storage for KvStore<Serde, Repo>
+where
+    Serde: Deserializer,
+    Repo: Read + HasKey,
 {
     type Serde = Serde;
     type Repo = Repo;
-    type Error = Error<Serde::Error, Repo::Error>;
-
-    fn save<T: Serialize>(&mut self, key: &[u8], item: &T) -> Result<(), Self::Error> {
-        let buffer = self.serde.serialize(item).map_err(Error::Serde)?;
-        self.repo.write(key, buffer).map_err(Error::Repo)?;
-        Ok(())
-    }
 
     fn may_load<T: DeserializeOwned>(&self, key: &[u8]) -> Result<Option<T>, Self::Error> {
         let Some(bytes) = self.repo.read(key).map_err(Error::Repo)? else {
@@ -142,6 +144,18 @@ where
 
     fn has_key(&self, key: &[u8]) -> Result<bool, Self::Error> {
         self.repo.has_key(key).map_err(Error::Repo)
+    }
+}
+
+impl<Serde, Repo> MutStorage for KvStore<Serde, Repo>
+where
+    Serde: Serializer + Deserializer,
+    Repo: Write + Remove + Read + HasKey,
+{
+    fn save<T: Serialize>(&mut self, key: &[u8], item: &T) -> Result<(), Self::Error> {
+        let buffer = self.serde.serialize(item).map_err(Error::Serde)?;
+        self.repo.write(key, buffer).map_err(Error::Repo)?;
+        Ok(())
     }
 
     fn remove(&mut self, key: &[u8]) -> Result<(), Self::Error> {
@@ -168,7 +182,7 @@ impl<T> Item<T> {
     /// # Errors
     ///
     /// This function will return an error if the store encounters an error.
-    pub fn save<Store: Storage>(&self, store: &mut Store, item: &T) -> Result<(), Store::Error>
+    pub fn save<Store: MutStorage>(&self, store: &mut Store, item: &T) -> Result<(), Store::Error>
     where
         T: Serialize,
     {
@@ -204,7 +218,7 @@ impl<T> Item<T> {
     /// # Errors
     ///
     /// This function will return an error if the store encounters an error.
-    pub fn clear<Store: Storage>(&self, store: &mut Store) -> Result<(), Store::Error> {
+    pub fn clear<Store: MutStorage>(&self, store: &mut Store) -> Result<(), Store::Error> {
         store.remove(self.key)
     }
 }
@@ -243,7 +257,7 @@ where
     /// # Errors
     ///
     /// This function will return an error if the store encounters an error.
-    pub fn save<Store: Storage>(
+    pub fn save<Store: MutStorage>(
         &self,
         store: &mut Store,
         key: &K,
@@ -289,7 +303,11 @@ where
     /// # Errors
     ///
     /// This function will return an error if the store encounters an error.
-    pub fn remove<Store: Storage>(&self, store: &mut Store, key: &K) -> Result<(), Store::Error> {
+    pub fn remove<Store: MutStorage>(
+        &self,
+        store: &mut Store,
+        key: &K,
+    ) -> Result<(), Store::Error> {
         let composite = compose_key::<N>(self.prefix, key);
         store.remove(composite.as_ref())
     }

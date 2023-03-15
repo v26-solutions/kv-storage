@@ -1,4 +1,4 @@
-use kv_storage::{item, map, Item, Map, Storage};
+use kv_storage::{item, map, Item, Map, MutStorage, Storage};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error<S = ()> {
@@ -81,7 +81,7 @@ impl<'a> Balance<'a> {
     const BALANCES: Map<1024, &str, u128> = map!("balances");
     const TOTAL: Item<u128> = item!("total_balance");
 
-    fn save<Store: Storage>(&self, store: &mut Store) -> Result<(), Error<Store::Error>> {
+    fn save<Store: MutStorage>(&self, store: &mut Store) -> Result<(), Error<Store::Error>> {
         Self::TOTAL.save(store, &self.total)?;
 
         Self::BALANCES
@@ -117,7 +117,7 @@ impl<'a> Balance<'a> {
 }
 
 impl<'a> ModifiedBalance<'a> {
-    pub fn save<Store: Storage>(
+    pub fn save<Store: MutStorage>(
         self,
         store: &mut Store,
     ) -> Result<&'a mut Balance<'a>, Error<Store::Error>> {

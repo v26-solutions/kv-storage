@@ -2,9 +2,7 @@
 mod test {
     use std::collections::HashMap;
 
-    use kv_storage::{
-        Deserializer, Fallible, GenericStorage, HasKey, Read, Remove, Serializer, Write,
-    };
+    use kv_storage::{Deserializer, Fallible, HasKey, KvStore, Read, Remove, Serializer, Write};
 
     use serde::{de::DeserializeOwned, Serialize};
 
@@ -73,7 +71,7 @@ mod test {
 
     #[test]
     fn it_works() {
-        let mut storage: GenericStorage<BinSerde, MemRepo> = GenericStorage::default();
+        let mut storage: KvStore<BinSerde, MemRepo> = KvStore::default();
 
         assert!(!Balance::account_exists(&storage, "alice").unwrap());
 

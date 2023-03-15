@@ -10,6 +10,12 @@ impl<T> CosmwasmRepo<T> {
     }
 }
 
+impl<T> From<T> for CosmwasmRepo<T> {
+    fn from(value: T) -> Self {
+        Self(value)
+    }
+}
+
 pub type Readonly<'a> = CosmwasmRepo<&'a dyn Storage>;
 
 pub type Mutable<'a> = CosmwasmRepo<&'a mut dyn Storage>;
@@ -17,6 +23,8 @@ pub type Mutable<'a> = CosmwasmRepo<&'a mut dyn Storage>;
 #[derive(Debug, thiserror::Error)]
 #[error("infallible")]
 pub struct Infallible;
+
+pub type Error = Infallible;
 
 impl<T> Fallible for CosmwasmRepo<T> {
     type Error = Infallible;

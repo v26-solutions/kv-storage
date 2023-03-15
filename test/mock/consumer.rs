@@ -82,10 +82,10 @@ impl<'a> Balance<'a> {
     const TOTAL: Item<u128> = item!("total_balance");
 
     fn save<Store: MutStorage>(&self, store: &mut Store) -> Result<(), Error<Store::Error>> {
-        Self::TOTAL.save(store, &self.total)?;
+        Self::TOTAL.save(store, self.total)?;
 
         Self::BALANCES
-            .save(store, &self.account, &self.balance)
+            .save(store, self.account, self.balance)
             .map_err(Error::from)
     }
 
@@ -93,7 +93,7 @@ impl<'a> Balance<'a> {
         store: &Store,
         account: &'a str,
     ) -> Result<bool, Error<Store::Error>> {
-        Self::BALANCES.has_key(store, &account).map_err(Error::from)
+        Self::BALANCES.has_key(store, account).map_err(Error::from)
     }
 
     pub fn load_total<Store: Storage>(store: &Store) -> Result<u128, Error<Store::Error>> {
@@ -105,7 +105,7 @@ impl<'a> Balance<'a> {
         store: &Store,
         account: &'a str,
     ) -> Result<Balance<'a>, Error<Store::Error>> {
-        let maybe_balance = Self::BALANCES.may_load(store, &account)?;
+        let maybe_balance = Self::BALANCES.may_load(store, account)?;
         let maybe_total = Self::TOTAL.may_load(store)?;
 
         Ok(Balance {

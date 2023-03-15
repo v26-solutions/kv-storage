@@ -6,6 +6,8 @@ pub struct Bincode {
     buffer: Vec<u8>,
 }
 
+pub type Error = bincode::Error;
+
 impl Bincode {
     pub fn new() -> Self {
         Self::default()
@@ -23,7 +25,7 @@ impl Bincode {
 }
 
 impl Fallible for Bincode {
-    type Error = bincode::Error;
+    type Error = Error;
 }
 
 impl Serializer for Bincode {

@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod test {
-    use kv_storage::KvStore;
+    use kv_storage::{map, KvStore, Map};
     use kv_storage_bincode::Bincode;
     use kv_storage_memory::MemoryRepo;
 
@@ -31,5 +31,37 @@ mod test {
         );
 
         assert_eq!(Balance::load_total(&storage).unwrap(), 500);
+    }
+
+    #[test]
+    fn composite_keys_work() {
+        const DOUBLE: Map<1024, (&str, &str), String> = map!("double_key");
+        const TRIPLE: Map<1024, (&str, &str, &str), String> = map!("triple_key");
+
+        let mut storage: KvStore<Bincode, MemoryRepo> = KvStore::default();
+
+        DOUBLE
+            .save(&mut storage, ("alice", "bob"), "hello".to_owned())
+            .unwrap();
+
+        TRIPLE
+            .save(&mut storage, ("alice", "bob", "eve"), "hello".to_owned())
+            .unwrap();
+
+        assert_eq!(
+            DOUBLE
+                .may_load(&storage, ("alice", "bob"))
+                .unwrap()
+                .unwrap(),
+            "hello"
+        );
+
+        assert_eq!(
+            TRIPLE
+                .may_load(&storage, ("alice", "bob", "eve"))
+                .unwrap()
+                .unwrap(),
+            "hello"
+        );
     }
 }

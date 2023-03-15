@@ -5,14 +5,14 @@ use cosmwasm_std::Storage;
 pub struct CosmwasmRepo<T>(T);
 
 impl<T> CosmwasmRepo<T> {
-    pub const fn readonly(storage: &dyn Storage) -> CosmwasmRepo<&dyn Storage> {
-        CosmwasmRepo(storage)
-    }
-
-    pub fn mutable(storage: &mut dyn Storage) -> CosmwasmRepo<&mut dyn Storage> {
+    pub const fn new(storage: T) -> CosmwasmRepo<T> {
         CosmwasmRepo(storage)
     }
 }
+
+pub type Readonly<'a> = CosmwasmRepo<&'a dyn Storage>;
+
+pub type Mutable<'a> = CosmwasmRepo<&'a mut dyn Storage>;
 
 #[derive(Debug, thiserror::Error)]
 #[error("infallible")]

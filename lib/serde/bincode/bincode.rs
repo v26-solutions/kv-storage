@@ -30,6 +30,7 @@ impl Fallible for Bincode {
 
 impl Serializer for Bincode {
     fn serialize<T: Serialize>(&mut self, item: &T) -> Result<&[u8], Self::Error> {
+        self.buffer.clear();
         bincode::serialize_into(&mut self.buffer, item)?;
         Ok(&self.buffer)
     }

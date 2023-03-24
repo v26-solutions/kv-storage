@@ -3,6 +3,11 @@ name = "kv-storage-bincode"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = [ "bincode-no-custom" ]
+bincode-std = [ "dep:bincode" ]
+bincode-no-custom = [ "dep:bincode-no-custom" ]
+
 [lib]
 path = "bincode.rs"
 test = false
@@ -12,4 +17,5 @@ doctest = false
 serde.workspace = true
 kv-storage.workspace = true
 
-bincode = "1.3"
+bincode = { version = "1.3", optional = true }
+bincode-no-custom = { path = "no-custom", optional = true }

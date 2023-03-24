@@ -1,6 +1,9 @@
 use kv_storage::{Deserializer, Fallible, Serializer};
 use serde::{de::DeserializeOwned, Serialize};
 
+#[cfg(feature = "bincode-no-custom")]
+use bincode_no_custom as bincode;
+
 #[derive(Default)]
 pub struct Bincode {
     buffer: Vec<u8>,
